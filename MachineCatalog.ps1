@@ -138,10 +138,10 @@ function New-MachineCatalog {
         [psobject[]]
         $CatalogParams
         ,
-        [Parameter(Mandatory=$True,HelpMessage='Suffix to be added to name of the catalog',ParameterSetName='CreateCatalogFromParam')]
+        [Parameter(Mandatory=$False,HelpMessage='Suffix to be added to name of the catalog',ParameterSetName='CreateCatalogFromParam')]
         [ValidateNotNullOrEmpty()]
         [string]
-        $Suffix
+        $Suffix = ''
     )
 
     Begin {
