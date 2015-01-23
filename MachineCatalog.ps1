@@ -495,7 +495,7 @@ function Rename-MachineCatalog {
 }
 
 #TODO
-function Migrate-DeliveryGroup {
+function Update-DeliveryGroup {
     # Add-BrokerMachine
     # Remove-BrokerMachine
 }
