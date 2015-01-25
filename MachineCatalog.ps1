@@ -208,7 +208,6 @@ function New-MachineCatalog {
     }
 }
 
-#TODO
 function Sync-MachineCatalog {
     <#
     .SYNOPSIS
@@ -494,8 +493,58 @@ function Rename-MachineCatalog {
     Rename-AcctIdentityPool -IdentityPoolName       $Name -NewIdentityPoolName       $NewName
 }
 
-#TODO
-function Update-DeliveryGroup {
-    # Add-BrokerMachine
-    # Remove-BrokerMachine
+#TEST
+function Update-DesktopGroup {
+    <#
+    .SYNOPSIS
+    Substitutes machines in a desktop group
+    .DESCRIPTION
+    The machines contained in the desktop group are removed and new machines are added from the specified catalog
+    .PARAMETER Name
+    Name of an existing desktop group
+    .PARAMETER CatalogName
+    Name of the catalog containing new machines
+    .PARAMETER Count
+    Number of machines to add
+    .EXAMPLE
+    The following command adds all machines from the given catalog to the specified desktop group
+    Update-DesktopGroup -Name 'DG-SessionHost' -CatalogName 'MCS-SessionHost'
+    .EXAMPLE
+    The following command adds two machines from the given catalog to the specified desktop group
+    Update-DesktopGroup -Name 'DG-SessionHost' -CatalogName 'MCS-SessionHost' -Count 2
+    #>
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory=$True,HelpMessage='Name of an existing desktop group')]
+        [ValidateNotNullOrEmpty()]
+        [string]
+        $Name
+        ,
+        [Parameter(Mandatory=$True,HelpMessage='Name of the catalog containing new machines')]
+        [ValidateNotNullOrEmpty()]
+        [string]
+        $CatalogName
+        ,
+        [Parameter(Mandatory=$False,HelpMessage='Number of machines to add')]
+        [ValidateNotNullOrEmpty()]
+        [int]
+        $Count
+    )
+
+    Write-Verbose ('[{0}] Retrieving machines in desktop group named {1}' -f $MyInvocation.MyCommand, $Name)
+    $ExistingMachines = Get-BrokerMachine | Where-Object DesktopGroupName -eq $Name
+    
+    $Catalog = Get-BrokerCatalog -Name $CatalogName
+    if (-Not $Count) {
+        $Count = $Catalog.UnassignedCount
+    }
+    Write-Verbose ('[{0}] Adding {2} machines from catalog {1} to desktop group <{3}>' -f $MyInvocation.MyCommand, $CatalogName, $Count, $Name)
+    $AddedCount = Add-BrokerMachinesToDesktopGroup -DesktopGroup $Name -Catalog $Catalog -Count $Count
+
+    Write-Verbose ('[{0}] Removing old machines from desktop group named {1}' -f $MyInvocation.MyCommand, $Name)
+    $ExistingMachines | Set-BrokerMachine -InMaintenanceMode $True
+    <#$ExistingMachines | foreach {
+        Stop-HypVM -LiteralPath XXX
+    }#>
+    $ExistingMachines | Remove-BrokerMachine -DesktopGroup $Name
 }
