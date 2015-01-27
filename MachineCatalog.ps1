@@ -182,6 +182,9 @@ function New-MachineCatalog {
                 throw ('[{0}] Broker catalog with name {1} already exists. Aborting.' -f $MyInvocation.MyCommand, $Name)
             }
             Write-Verbose ('[{0}] Creating broker catalog with name {1}' -f $MyInvocation.MyCommand, $Name)
+            if (-Not $Description) {
+                $Description = $Name
+            }
             $NewBrokerCatalog = New-BrokerCatalog -Name $Name -Description $Description -AllocationType $AllocationType -ProvisioningType $ProvisioningType -PersistUserChanges $PersistUserChanges -SessionSupport $SessionSupport -MachinesArePhysical $MachinesArePhysical -Verbose:$False
 
             if ($ProvisioningType -like 'manual') {
@@ -200,7 +203,6 @@ function New-MachineCatalog {
                 throw ('[{0}] Provisioning scheme with name {1} already exists. Aborting.' -f $MyInvocation.MyCommand, $Name)
             }
             Write-Verbose ('[{0}] Creating provisioning scheme with name {1}' -f $MyInvocation.MyCommand, $Name)
-            #$NewProvScheme = New-ProvScheme -ProvisioningSchemeName $Name -HostingUnitName $HostingUnitName -IdentityPoolName $Name -MasterImageVM $MasterImageVM -VMCpuCount $CpuCount -VMMemoryMB $MemoryMB -CleanOnBoot:$CleanOnBoot
             $NewProvTaskId = New-ProvScheme -ProvisioningSchemeName $Name -HostingUnitName $HostingUnitName -IdentityPoolName $Name -MasterImageVM $MasterImageVM -VMCpuCount $CpuCount -VMMemoryMB $MemoryMB -CleanOnBoot:$CleanOnBoot -Verbose:$False -RunAsynchronously
 
             $ProvTask = Get-ProvTask -TaskId $NewProvTaskId
@@ -220,7 +222,7 @@ function New-MachineCatalog {
 
             } else {
                 Set-BrokerCatalog -Name $Name -ProvisioningSchemeId $NewProvScheme.ProvisioningSchemeUid -Verbose:$False
-                $Controllers = Get-BrokerController -Verbose:$False | select -ExpandProperty DNSName -Verbose:$False
+                $Controllers = Get-BrokerController -Verbose:$False | Select-Object -ExpandProperty DNSName -Verbose:$False
                 Add-ProvSchemeControllerAddress -ProvisioningSchemeName $Name -ControllerAddress $Controllers -Verbose:$False
             }
         }
@@ -306,7 +308,7 @@ function ConvertFrom-MachineCatalog {
     .SYNOPSIS
     Convert a broker catalog to a hash
     .DESCRIPTION
-    XXX
+    Only those fields are extracted from the catalog object that are required for creating the catalog
     .PARAMETER BrokerCatalog
     Collection of broker catalog to convert to a hash
     .PARAMETER ExcludeProvScheme
@@ -367,12 +369,10 @@ function ConvertFrom-MachineCatalog {
                 Write-Verbose ('[{0}] [{1}] Retrieved ProvisioningScheme.Name={2}' -f $MyInvocation.MyCommand, $Catalog.UUID, $Catalog.Name)
 
                 $CatalogParams | Add-Member -NotePropertyMembers @{
-                        #ProvisioningSchemeName  = $ProvScheme.ProvisioningSchemeName
                         MasterImageVM           = $ProvScheme.MasterImageVM
                         CpuCount                = $ProvScheme.CpuCount
                         MemoryMB                = $ProvScheme.MemoryMB
                         CleanOnBoot             = $ProvScheme.CleanOnBoot
-                        #UsePersonalVDiskStorage = $ProvScheme.UsePersonalVDiskStorage
                 }
             }
 
@@ -382,7 +382,6 @@ function ConvertFrom-MachineCatalog {
                 Write-Verbose ('[{0}] [{1}] Retrieved AcctIdentityPool.IdentityPoolName={2}' -f $MyInvocation.MyCommand, $Catalog.UUID, $AcctIdentityPool.IdentityPoolName)
 
                 $CatalogParams | Add-Member -NotePropertyMembers @{
-                        #IdentityPoolName   = $AcctIdentityPool.IdentityPoolName
                         NamingScheme       = $AcctIdentityPool.NamingScheme
                         NamingSchemeType   = $AcctIdentityPool.NamingSchemeType
                         OU                 = $AcctIdentityPool.OU
@@ -574,13 +573,10 @@ function Update-DeliveryGroup {
 
     Write-Verbose ('[{0}] Removing old machines from desktop group named {1}' -f $MyInvocation.MyCommand, $Name)
     $ExistingMachines | Set-BrokerMachine -InMaintenanceMode $True | Out-Null
-    <#$ExistingMachines | foreach {
-        Stop-HypVM -LiteralPath XXX
-    }#>
     $ExistingMachines | Remove-BrokerMachine -DesktopGroup $Name | Out-Null
 
     Write-Verbose ('[{0}] Starting new machines in delivery group named {1}' -f $MyInvocation.MyCommand, $Name)
-    Get-BrokerMachine -DesktopGroupName $Name | where { $_.SupportedPowerActions -icontains 'TurnOn' } | foreach {
+    Get-BrokerMachine -DesktopGroupName $Name | Where-Object { $_.SupportedPowerActions -icontains 'TurnOn' } | foreach {
         New-BrokerHostingPowerAction -Action 'TurnOn' -MachineName $_.MachineName
     }
 }
@@ -598,28 +594,28 @@ function New-HostingConnection {
     .PARAMETER HypervisorAddress
     This contains the URL to the vCenter web API
     .PARAMETER HypervisorCredential
-    A credentials object
+    A credentials object for authentication against the hypervisor
     .EXAMPLE
     New-HostingConnection -Name vcenter-01 -ConnectionType VCenter -HypervisorAddress https://vcenter-01.example.com/sdk -HypervisorCredential (Get-Credential)
     #>
     [CmdletBinding()]
     param(
-        [Parameter(Mandatory=$True,HelpMessage='XXX')]
+        [Parameter(Mandatory=$True,HelpMessage='Name of the hosting connection')]
         [ValidateNotNullOrEmpty()]
         [string]
         $Name
         ,
-        [Parameter(Mandatory=$True,HelpMessage='XXX')]
+        [Parameter(Mandatory=$True,HelpMessage='Connection type can be VCenter, XenServer and SCVMM among several others')]
         [ValidateSet('VCenter','XenServer','SCVMM')]
         [string]
         $ConnectionType
         ,
-        [Parameter(Mandatory=$True,HelpMessage='XXX')]
+        [Parameter(Mandatory=$True,HelpMessage='This contains the URL to the vCenter web API')]
         [ValidateNotNullOrEmpty()]
         [string]
         $HypervisorAddress
         ,
-        [Parameter(Mandatory=$True,HelpMessage='XXX')]
+        [Parameter(Mandatory=$True,HelpMessage='A credentials object for authentication against the hypervisor')]
         [ValidateNotNullOrEmpty()]
         [pscredential]
         $HypervisorCredential
@@ -630,7 +626,7 @@ function New-HostingConnection {
     } else {
         $HostingConnection = Get-Item XDHyp:\Connections\$Name
     }
-    $HypervisorConnectionUid = $HostingConnection.HypervisorConnectionUid | select -ExpandProperty Guid
+    $HypervisorConnectionUid = $HostingConnection.HypervisorConnectionUid | Select-Object -ExpandProperty Guid
     New-BrokerHypervisorConnection -HypHypervisorConnectionUid $HypervisorConnectionUid | Out-Null
 }
 
@@ -645,37 +641,37 @@ function New-HostingResource {
     .PARAMETER HypervisorConnectionName
     Name of the hosting connection
     .PARAMETER ClusterName
-    Name of the host cluster in vcenter
+    Name of the host cluster in vCenter
     .PARAMETER NetworkName
-    Array of names of networks
+    Array of names of networks in vCenter
     .PARAMETER StorageName
-    Array of names of datastores
+    Array of names of datastores in vCenter
     .EXAMPLE
     New-HostingResource -Name cluster-01 -HypervisorConnectionName vcenter-01 -ClusterName cluster-01 -NetworkName (vlan_100,vlan_101) -StorageName (datastore1,datastore2)
     #>
     [CmdletBinding()]
     param(
-        [Parameter(Mandatory=$True,HelpMessage='XXX')]
+        [Parameter(Mandatory=$True,HelpMessage='Name of the hosting resource')]
         [ValidateNotNullOrEmpty()]
         [string]
         $Name
         ,
-        [Parameter(Mandatory=$True,HelpMessage='XXX')]
+        [Parameter(Mandatory=$True,HelpMessage='Name of the hosting connection')]
         [ValidateNotNullOrEmpty()]
         [string]
         $HypervisorConnectionName
         ,
-        [Parameter(Mandatory=$True,HelpMessage='XXX')]
+        [Parameter(Mandatory=$True,HelpMessage='Name of the host cluster in vCenter')]
         [ValidateNotNullOrEmpty()]
         [string]
         $ClusterName
         ,
-        [Parameter(Mandatory=$True,HelpMessage='XXX')]
+        [Parameter(Mandatory=$True,HelpMessage='Array of names of networks in vCenter')]
         [ValidateNotNullOrEmpty()]
         [string[]]
         $NetworkName
         ,
-        [Parameter(Mandatory=$True,HelpMessage='XXX')]
+        [Parameter(Mandatory=$True,HelpMessage='Array of names of datastores in vCenter')]
         [ValidateNotNullOrEmpty()]
         [string[]]
         $StorageName
