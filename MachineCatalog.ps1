@@ -2,7 +2,7 @@
 
 Add-PSSnapin Citrix*
 
-# MasterVMImage must be a snapshot
+# MasterVMImage must be a snapshot (or use New-HypVMSnapshot first)
 # Create catalog after provisioning scheme
 function New-MachineCatalog {
     <#
@@ -271,6 +271,7 @@ function Sync-MachineCatalog {
     if ($BrokerCatalogName -And $NewBrokerCatalogName) {
         $NewBrokerCatalog = Get-BrokerCatalog -Name $NewBrokerCatalogName
         $VmCount = Get-ProvVM -ProvisioningSchemeUid $BrokerCatalog.ProvisioningSchemeId -Verbose:$False | Measure-Object -Line | Select-Object -ExpandProperty Lines
+        Write-Verbose ('[{0}] Calling recursively for catalog with name {1}' -f $MyInvocation.MyCommand, $NewBrokerCatalogName)
         Sync-MachineCatalog -BrokerCatalog $NewBrokerCatalog.Name -Count $VmCount
         return
     }
@@ -278,6 +279,7 @@ function Sync-MachineCatalog {
     $AcctIdentityPool = Get-AcctIdentityPool -IdentityPoolName $BrokerCatalog.Name -Verbose:$False
     $ProvScheme = Get-ProvScheme -ProvisioningSchemeName $BrokerCatalog.Name -Verbose:$False
 
+    Write-Verbose ('[{0}] Creating new accounts in identity pool {1}' -f $MyInvocation.MyCommand, $AcctIdentityPool.IdentityPoolName)
     $AdAccounts = New-AcctADAccount -IdentityPoolName $AcctIdentityPool.IdentityPoolName -Count $Count -Verbose:$False
     $ProvTaskId = New-ProvVM -ADAccountName @($AdAccounts.SuccessfulAccounts) -ProvisioningSchemeName $ProvScheme.ProvisioningSchemeName -RunAsynchronously
     $ProvTask = Get-ProvTask -TaskId $ProvTaskId
@@ -291,10 +293,11 @@ function Sync-MachineCatalog {
         $ProvTask = Get-ProvTask -TaskID $ProvTaskId
     }
 
+    Write-Verbose ('[{0}] Assigning machines to catalog with name {1}' -f $MyInvocation.MyCommand, $ProvScheme.ProvisioningSchemeName)
     $ProvVMs = Get-ProvVM -ProvisioningSchemeUid $ProvScheme.ProvisioningSchemeUid -Verbose:$False
     ForEach ($ProvVM in $ProvVMs) {
         Lock-ProvVM -ProvisioningSchemeName $ProvScheme.ProvisioningSchemeName -Tag 'Brokered' -VMID @($ProvVM.VMId) -Verbose:$False -ErrorAction SilentlyContinue
-        New-BrokerMachine -CatalogUid $BrokerCatalog.Uid -MachineName $ProvVM.ADAccountName -Verbose:$False
+        New-BrokerMachine -CatalogUid $BrokerCatalog.Uid -MachineName $ProvVM.ADAccountName -Verbose:$False | Out-Null
     }
 }
 
@@ -521,7 +524,6 @@ function Rename-MachineCatalog {
     Rename-AcctIdentityPool -IdentityPoolName       $Name -NewIdentityPoolName       $NewName
 }
 
-# Power on new machines
 function Update-DeliveryGroup {
     <#
     .SYNOPSIS
@@ -571,15 +573,35 @@ function Update-DeliveryGroup {
     $AddedCount = Add-BrokerMachinesToDesktopGroup -DesktopGroup $Name -Catalog $Catalog -Count $Count
 
     Write-Verbose ('[{0}] Removing old machines from desktop group named {1}' -f $MyInvocation.MyCommand, $Name)
-    $ExistingMachines | Set-BrokerMachine -InMaintenanceMode $True
+    $ExistingMachines | Set-BrokerMachine -InMaintenanceMode $True | Out-Null
     <#$ExistingMachines | foreach {
         Stop-HypVM -LiteralPath XXX
     }#>
-    $ExistingMachines | Remove-BrokerMachine -DesktopGroup $Name
+    $ExistingMachines | Remove-BrokerMachine -DesktopGroup $Name | Out-Null
+
+    Write-Verbose ('[{0}] Starting new machines in delivery group named {1}' -f $MyInvocation.MyCommand, $Name)
+    Get-BrokerMachine -DesktopGroupName $Name | where { $_.SupportedPowerActions -icontains 'TurnOn' } | foreach {
+        New-BrokerHostingPowerAction -Action 'TurnOn' -MachineName $_.MachineName
+    }
 }
 
-#HELP
 function New-HostingConnection {
+    <#
+    .SYNOPSIS
+    Create a new hosting connection
+    .DESCRIPTION
+    This function only creates a connection to a hosting environment without choosing any resources (see New-HostingResource)
+    .PARAMETER Name
+    Name of the hosting connection
+    .PARAMETER ConnectionType
+    Connection type can be VCenter, XenServer and SCVMM among several others
+    .PARAMETER HypervisorAddress
+    This contains the URL to the vCenter web API
+    .PARAMETER HypervisorCredential
+    A credentials object
+    .EXAMPLE
+    New-HostingConnection -Name vcenter-01 -ConnectionType VCenter -HypervisorAddress https://vcenter-01.example.com/sdk -HypervisorCredential (Get-Credential)
+    #>
     [CmdletBinding()]
     param(
         [Parameter(Mandatory=$True,HelpMessage='XXX')]
@@ -612,8 +634,25 @@ function New-HostingConnection {
     New-BrokerHypervisorConnection -HypHypervisorConnectionUid $HypervisorConnectionUid | Out-Null
 }
 
-#HELP
 function New-HostingResource {
+    <#
+    .SYNOPSIS
+    Create a new hosting resource
+    .DESCRIPTION
+    This function creates a resource (network and storage) based on a hosting connection (see New-HostingConnection)
+    .PARAMETER Name
+    Name of the hosting resource
+    .PARAMETER HypervisorConnectionName
+    Name of the hosting connection
+    .PARAMETER ClusterName
+    Name of the host cluster in vcenter
+    .PARAMETER NetworkName
+    Array of names of networks
+    .PARAMETER StorageName
+    Array of names of datastores
+    .EXAMPLE
+    New-HostingResource -Name cluster-01 -HypervisorConnectionName vcenter-01 -ClusterName cluster-01 -NetworkName (vlan_100,vlan_101) -StorageName (datastore1,datastore2)
+    #>
     [CmdletBinding()]
     param(
         [Parameter(Mandatory=$True,HelpMessage='XXX')]
