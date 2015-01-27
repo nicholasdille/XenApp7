@@ -2,13 +2,10 @@
 
 Add-PSSnapin Citrix*
 
-#HELP
 function New-MachineCatalog {
     <#
     .SYNOPSIS
     Creates a new catalog
-    .DESCRIPTION
-    XXX
     .PARAMETER Name
     Name of the new catalog
     .PARAMETER Description
@@ -46,9 +43,7 @@ function New-MachineCatalog {
     .PARAMETER Suffix
     Suffix to be added to name of the catalog
     .EXAMPLE
-    XXX Explicit
-    .EXAMPLE
-    Get-BrokerCatalog | New-MachineCatalog -Suffix 'test'
+    Get-BrokerCatalog | ConvertFrom-MachineCatalog | New-MachineCatalog -Suffix '-test'
     .NOTES
     Thanks to Aaron Parker (@stealthpuppy) for the original code (http://stealthpuppy.com/xendesktop-mcs-machine-catalog-powershell/)
     #>
@@ -61,31 +56,31 @@ function New-MachineCatalog {
         $Name
         ,
         [Parameter(Mandatory=$False,HelpMessage='Description of the new catalog',ParameterSetName='Explicit')]
-        [Parameter(Mandatory=$True,HelpMessage='Name of the new catalog',ParameterSetName='Explicit2')]
+        [Parameter(Mandatory=$False,HelpMessage='Description of the new catalog',ParameterSetName='Explicit2')]
         [ValidateNotNullOrEmpty()]
         [string]
         $Description
         ,
         [Parameter(Mandatory=$True,HelpMessage='Allocation type of the catalog',ParameterSetName='Explicit')]
-        [Parameter(Mandatory=$True,HelpMessage='Name of the new catalog',ParameterSetName='Explicit2')]
+        [Parameter(Mandatory=$True,HelpMessage='Allocation type of the catalog',ParameterSetName='Explicit2')]
         [ValidateSet('Static','Permanent','Random')]
         [string]
         $AllocationType
         ,
         [Parameter(Mandatory=$True,HelpMessage='Provisioning type of the catalog',ParameterSetName='Explicit')]
-        [Parameter(Mandatory=$True,HelpMessage='Name of the new catalog',ParameterSetName='Explicit2')]
+        [Parameter(Mandatory=$True,HelpMessage='Provisioning type of the catalog',ParameterSetName='Explicit2')]
         [ValidateSet('Manual','PVS','MCS')]
         [string]
         $ProvisioningType
         ,
         [Parameter(Mandatory=$True,HelpMessage='Whether and how to persist user changes',ParameterSetName='Explicit')]
-        [Parameter(Mandatory=$True,HelpMessage='Name of the new catalog',ParameterSetName='Explicit2')]
+        [Parameter(Mandatory=$True,HelpMessage='Whether and how to persist user changes',ParameterSetName='Explicit2')]
         [ValidateSet('OnLocal','Discard','OnPvd')]
         [string]
         $PersistUserChanges
         ,
         [Parameter(Mandatory=$True,HelpMessage='How many sessions are permitted',ParameterSetName='Explicit')]
-        [Parameter(Mandatory=$True,HelpMessage='Name of the new catalog',ParameterSetName='Explicit2')]
+        [Parameter(Mandatory=$True,HelpMessage='How many sessions are permitted',ParameterSetName='Explicit2')]
         [ValidateSet('SingleSession','MultiSession')]
         [string]
         $SessionSupport
@@ -164,12 +159,20 @@ function New-MachineCatalog {
         if ($CatalogParams) {
             foreach ($Catalog in $CatalogParams) {
                 $Catalog.Name += $Suffix
-                $Catalog.CleanOnBoot = $Catalog.CleanOnBoot -eq 'True'
-                Write-Verbose ('[{0}] Calling recursively to create catalog with name {1}' -f $MyInvocation.MyCommand, $Catalog.Name)
-                New-MachineCatalog `                    -Name $Catalog.Name -Description $Catalog.Description -AllocationType $Catalog.AllocationType -ProvisioningType $Catalog.ProvisioningType -PersistUserChanges $Catalog.PersistUserChanges -SessionSupport $Catalog.SessionSupport `
-                    -Domain $Catalog.Domain -OU $Catalog.OU -NamingScheme $Catalog.NamingScheme -NamingSchemeType $Catalog.NamingSchemeType `
-                    -MasterImageVM $Catalog.MasterImageVM -CpuCount $Catalog.CpuCount -MemoryMB $Catalog.MemoryMB -CleanOnBoot $Catalog.CleanOnBoot `
-                    -HostingUnitName $Catalog.HostingUnitName
+
+                if ($Catalog.ProvisioningType -like 'manual') {
+                    Write-Verbose ('[{0}] Calling recursively to create catalog with name {1} and provisioning type manual' -f $MyInvocation.MyCommand, $Catalog.Name)
+                    New-MachineCatalog -Name $Catalog.Name -AllocationType $Catalog.AllocationType -ProvisioningType $Catalog.ProvisioningType -PersistUserChanges $Catalog.PersistUserChanges -SessionSupport $Catalog.SessionSupport
+                    if ($Catalog.Description) { Set-BrokerCatalog -Name $Catalog.Name -Description $Catalog.Description }
+
+                } else {
+                    $Catalog.CleanOnBoot = $Catalog.CleanOnBoot -eq 'True'
+                    Write-Verbose ('[{0}] Calling recursively to create catalog with name {1} with provisioning scheme' -f $MyInvocation.MyCommand, $Catalog.Name)
+                    New-MachineCatalog `                        -Name $Catalog.Name -Description $Catalog.Description -AllocationType $Catalog.AllocationType -ProvisioningType $Catalog.ProvisioningType -PersistUserChanges $Catalog.PersistUserChanges -SessionSupport $Catalog.SessionSupport `
+                        -Domain $Catalog.Domain -OU $Catalog.OU -NamingScheme $Catalog.NamingScheme -NamingSchemeType $Catalog.NamingSchemeType `
+                        -MasterImageVM $Catalog.MasterImageVM -CpuCount $Catalog.CpuCount -MemoryMB $Catalog.MemoryMB -CleanOnBoot $Catalog.CleanOnBoot `
+                        -HostingUnitName $Catalog.HostingUnitName
+                }
             }
 
         } else {
