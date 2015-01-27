@@ -2,10 +2,11 @@
 
 Add-PSSnapin Citrix*
 
+#HELP
 function New-MachineCatalog {
     <#
     .SYNOPSIS
-    Creates or duplicates a new catalog
+    Creates a new catalog
     .DESCRIPTION
     XXX
     .PARAMETER Name
@@ -54,34 +55,45 @@ function New-MachineCatalog {
     [CmdletBinding()]
     param(
         [Parameter(Mandatory=$True,HelpMessage='Name of the new catalog',ParameterSetName='Explicit')]
+        [Parameter(Mandatory=$True,HelpMessage='Name of the new catalog',ParameterSetName='Explicit2')]
         [ValidateNotNullOrEmpty()]
         [string]
         $Name
         ,
         [Parameter(Mandatory=$False,HelpMessage='Description of the new catalog',ParameterSetName='Explicit')]
-        #[ValidateNotNullOrEmpty()]
+        [Parameter(Mandatory=$True,HelpMessage='Name of the new catalog',ParameterSetName='Explicit2')]
+        [ValidateNotNullOrEmpty()]
         [string]
         $Description
         ,
         [Parameter(Mandatory=$True,HelpMessage='Allocation type of the catalog',ParameterSetName='Explicit')]
+        [Parameter(Mandatory=$True,HelpMessage='Name of the new catalog',ParameterSetName='Explicit2')]
         [ValidateSet('Static','Permanent','Random')]
         [string]
         $AllocationType
         ,
         [Parameter(Mandatory=$True,HelpMessage='Provisioning type of the catalog',ParameterSetName='Explicit')]
+        [Parameter(Mandatory=$True,HelpMessage='Name of the new catalog',ParameterSetName='Explicit2')]
         [ValidateSet('Manual','PVS','MCS')]
         [string]
         $ProvisioningType
         ,
         [Parameter(Mandatory=$True,HelpMessage='Whether and how to persist user changes',ParameterSetName='Explicit')]
+        [Parameter(Mandatory=$True,HelpMessage='Name of the new catalog',ParameterSetName='Explicit2')]
         [ValidateSet('OnLocal','Discard','OnPvd')]
         [string]
         $PersistUserChanges
         ,
         [Parameter(Mandatory=$True,HelpMessage='How many sessions are permitted',ParameterSetName='Explicit')]
+        [Parameter(Mandatory=$True,HelpMessage='Name of the new catalog',ParameterSetName='Explicit2')]
         [ValidateSet('SingleSession','MultiSession')]
         [string]
         $SessionSupport
+        ,
+        [Parameter(Mandatory=$False,HelpMessage='Name of the new catalog',ParameterSetName='Explicit2')]
+        [ValidateNotNullOrEmpty()]
+        [bool]
+        $MachinesArePhysical = $False
         ,
         [Parameter(Mandatory=$True,HelpMessage='Path to master image',ParameterSetName='Explicit')]
         [ValidateNotNullOrEmpty()]
@@ -165,7 +177,12 @@ function New-MachineCatalog {
                 throw ('[{0}] Broker catalog with name {1} already exists. Aborting.' -f $MyInvocation.MyCommand, $Name)
             }
             Write-Verbose ('[{0}] Creating broker catalog with name {1}' -f $MyInvocation.MyCommand, $Name)
-            $NewBrokerCatalog = New-BrokerCatalog -Name $Name -Description $Description -AllocationType $AllocationType -ProvisioningType $ProvisioningType -PersistUserChanges $PersistUserChanges -SessionSupport $SessionSupport -Verbose:$False
+            $NewBrokerCatalog = New-BrokerCatalog -Name $Name -Description $Description -AllocationType $AllocationType -ProvisioningType $ProvisioningType -PersistUserChanges $PersistUserChanges -SessionSupport $SessionSupport -MachinesArePhysical $MachinesArePhysical -Verbose:$False
+
+            if ($ProvisioningType -like 'manual') {
+                Write-Verbose ('[{0}] Broker catalog named {1} does not need a provisioning scheme' -f $MyInvocation.MyCommand, $Name)
+                continue
+            }
             
             if (Get-AcctIdentityPool -IdentityPoolName $Name -Verbose:$False -ErrorAction SilentlyContinue) {
                 throw ('[{0}] Account identity pool with name {1} already exists. Aborting.' -f $MyInvocation.MyCommand, $Name)
@@ -214,9 +231,9 @@ function Sync-MachineCatalog {
     Ensures the same amount of resource in the new broker catalog
     .DESCRIPTION
     Creates the same number of VMs in the new broker catalog as there are VMS present in the old broker catalog
-    .PARAMETER BrokerCatalog
+    .PARAMETER BrokerCatalogName
     The currently active broker catalog
-    .PARAMETER NewBrokerCatalog
+    .PARAMETER NewBrokerCatalogName
     The new broker catalog
     .EXAMPLE
     Sync-ProvVM -BrokerCatalog 'BrokenCatalog' -NewBrokerCatalog 'FixedBrokerCatalog'
@@ -229,12 +246,12 @@ function Sync-MachineCatalog {
         [Parameter(Mandatory=$True,HelpMessage='The new broker catalog',ParameterSetName='Count')]
         [ValidateNotNullOrEmpty()]
         [string]
-        $BrokerCatalog
+        $BrokerCatalogName
         ,
         [Parameter(Mandatory=$True,HelpMessage='The new broker catalog',ParameterSetName='Sync')]
         [ValidateNotNullOrEmpty()]
         [string]
-        $NewBrokerCatalog
+        $NewBrokerCatalogName
         ,
         [Parameter(Mandatory=$True,HelpMessage='The new broker catalog',ParameterSetName='Count')]
         [ValidateNotNullOrEmpty()]
@@ -242,15 +259,18 @@ function Sync-MachineCatalog {
         $Count
     )
 
-    if ($BrokerCatalog -And $NewBrokerCatalog) {
+    $BrokerCatalog = Get-BrokerCatalog -Name $BrokerCatalogName
+    if ($BrokerCatalogName -And $NewBrokerCatalogName) {
+        $NewBrokerCatalog = Get-BrokerCatalog -Name $NewBrokerCatalogName
         $VmCount = Get-ProvVM -ProvisioningSchemeUid $BrokerCatalog.ProvisioningSchemeId | Measure-Object -Line | Select-Object -ExpandProperty Lines
         Sync-MachineCatalog -BrokerCatalog $NewBrokerCatalog -Count $VmCount
+        return
     }
 
     $AcctIdentityPool = Get-AcctIdentityPool -IdentityPoolName $BrokerCatalog.Name
     $ProvScheme = Get-ProvScheme -ProvisioningSchemeName $BrokerCatalog.Name
 
-    $AdAccounts = New-AcctADAccount -IdentityPoolName $AcctIdentityPool.IdentityPoolName -Count $VmCount
+    $AdAccounts = New-AcctADAccount -IdentityPoolName $AcctIdentityPool.IdentityPoolName -Count $Count
     $ProvTaskId = New-ProvVM -ADAccountName @($AdAccounts.SuccessfulAccounts) -ProvisioningSchemeName $ProvScheme.ProvisioningSchemeName -RunAsynchronously
     $ProvTask = Get-ProvTask -TaskId $ProvTaskId
 
@@ -258,15 +278,15 @@ function Sync-MachineCatalog {
     While ( $ProvTask.Active -eq $True ) {
         Try { $CurrentProgress = If ( $ProvTask.TaskProgress ) { $ProvTask.TaskProgress } Else {0} } Catch { }
 
-        Write-Progress -Activity 'Creating Virtual Machines' -Status ($CurrentProgress + '% Complete') -PercentComplete $CurrentProgress
+        Write-Progress -Activity 'Creating Virtual Machines' -Status ('' + $CurrentProgress + '% Complete') -PercentComplete $CurrentProgress
         Start-Sleep -Seconds 10
         $ProvTask = Get-ProvTask -TaskID $ProvTaskId
     }
 
-    $ProvVMs = Get-ProvVM -AdminAddress $adminAddress -ProvisioningSchemeUid $ProvScheme.ProvisioningSchemeUid
+    $ProvVMs = Get-ProvVM -ProvisioningSchemeUid $ProvScheme.ProvisioningSchemeUid
     ForEach ($ProvVM in $ProvVMs) {
-        Lock-ProvVM -ProvisioningSchemeName $ProvScheme.ProvisioningSchemeName -Tag 'Brokered' -VMID @($ProvVM.VMId)
-        New-BrokerMachine -CatalogUid $catalogUid.Uid -MachineName $ProvVM.ADAccountName
+        Lock-ProvVM -ProvisioningSchemeName $ProvScheme.ProvisioningSchemeName -Tag 'Brokered' -VMID @($ProvVM.VMId) -ErrorAction SilentlyContinue
+        New-BrokerMachine -CatalogUid $BrokerCatalog.Uid -MachineName $ProvVM.ADAccountName
     }
 }
 
@@ -493,8 +513,7 @@ function Rename-MachineCatalog {
     Rename-AcctIdentityPool -IdentityPoolName       $Name -NewIdentityPoolName       $NewName
 }
 
-#TEST
-function Update-DesktopGroup {
+function Update-DeliveryGroup {
     <#
     .SYNOPSIS
     Substitutes machines in a desktop group
@@ -508,10 +527,10 @@ function Update-DesktopGroup {
     Number of machines to add
     .EXAMPLE
     The following command adds all machines from the given catalog to the specified desktop group
-    Update-DesktopGroup -Name 'DG-SessionHost' -CatalogName 'MCS-SessionHost'
+    Update-DeliveryGroup -Name 'DG-SessionHost' -CatalogName 'MCS-SessionHost'
     .EXAMPLE
     The following command adds two machines from the given catalog to the specified desktop group
-    Update-DesktopGroup -Name 'DG-SessionHost' -CatalogName 'MCS-SessionHost' -Count 2
+    Update-DeliveryGroup -Name 'DG-SessionHost' -CatalogName 'MCS-SessionHost' -Count 2
     #>
     [CmdletBinding()]
     param(
@@ -533,6 +552,7 @@ function Update-DesktopGroup {
 
     Write-Verbose ('[{0}] Retrieving machines in desktop group named {1}' -f $MyInvocation.MyCommand, $Name)
     $ExistingMachines = Get-BrokerMachine | Where-Object DesktopGroupName -eq $Name
+    $ExistingMachines | foreach { Write-Debug ('[{0}]   {1}' -f $MyInvocation.MyCommand, $_.MachineName) }
     
     $Catalog = Get-BrokerCatalog -Name $CatalogName
     if (-Not $Count) {
