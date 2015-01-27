@@ -2,6 +2,8 @@
 
 Add-PSSnapin Citrix*
 
+# MasterVMImage must be a snapshot
+# Create catalog after provisioning scheme
 function New-MachineCatalog {
     <#
     .SYNOPSIS
@@ -198,7 +200,8 @@ function New-MachineCatalog {
                 throw ('[{0}] Provisioning scheme with name {1} already exists. Aborting.' -f $MyInvocation.MyCommand, $Name)
             }
             Write-Verbose ('[{0}] Creating provisioning scheme with name {1}' -f $MyInvocation.MyCommand, $Name)
-            $NewProvTaskId = New-ProvScheme -ProvisioningSchemeName $Name -HostingUnitName $HostingUnitName -IdentityPoolName $Name -MasterImageVM $MasterImageVM -VMCpuCount $CpuCount -VMMemoryMB $MemoryMB -CleanOnBoot:$CleanOnBoot -RunAsynchronously -Verbose:$False
+            #$NewProvScheme = New-ProvScheme -ProvisioningSchemeName $Name -HostingUnitName $HostingUnitName -IdentityPoolName $Name -MasterImageVM $MasterImageVM -VMCpuCount $CpuCount -VMMemoryMB $MemoryMB -CleanOnBoot:$CleanOnBoot
+            $NewProvTaskId = New-ProvScheme -ProvisioningSchemeName $Name -HostingUnitName $HostingUnitName -IdentityPoolName $Name -MasterImageVM $MasterImageVM -VMCpuCount $CpuCount -VMMemoryMB $MemoryMB -CleanOnBoot:$CleanOnBoot -Verbose:$False -RunAsynchronously
 
             $ProvTask = Get-ProvTask -TaskId $NewProvTaskId
             Write-Debug ('[{0}] Tracking progress of creation process for provisioning scheme with name {1}' -f $MyInvocation.MyCommand, $Name)
@@ -262,18 +265,20 @@ function Sync-MachineCatalog {
         $Count
     )
 
+    Write-Verbose ('[{0}] Processing catalog {1}' -f $MyInvocation.MyCommand, $BrokerCatalogName)
+
     $BrokerCatalog = Get-BrokerCatalog -Name $BrokerCatalogName
     if ($BrokerCatalogName -And $NewBrokerCatalogName) {
         $NewBrokerCatalog = Get-BrokerCatalog -Name $NewBrokerCatalogName
-        $VmCount = Get-ProvVM -ProvisioningSchemeUid $BrokerCatalog.ProvisioningSchemeId | Measure-Object -Line | Select-Object -ExpandProperty Lines
-        Sync-MachineCatalog -BrokerCatalog $NewBrokerCatalog -Count $VmCount
+        $VmCount = Get-ProvVM -ProvisioningSchemeUid $BrokerCatalog.ProvisioningSchemeId -Verbose:$False | Measure-Object -Line | Select-Object -ExpandProperty Lines
+        Sync-MachineCatalog -BrokerCatalog $NewBrokerCatalog.Name -Count $VmCount
         return
     }
 
-    $AcctIdentityPool = Get-AcctIdentityPool -IdentityPoolName $BrokerCatalog.Name
-    $ProvScheme = Get-ProvScheme -ProvisioningSchemeName $BrokerCatalog.Name
+    $AcctIdentityPool = Get-AcctIdentityPool -IdentityPoolName $BrokerCatalog.Name -Verbose:$False
+    $ProvScheme = Get-ProvScheme -ProvisioningSchemeName $BrokerCatalog.Name -Verbose:$False
 
-    $AdAccounts = New-AcctADAccount -IdentityPoolName $AcctIdentityPool.IdentityPoolName -Count $Count
+    $AdAccounts = New-AcctADAccount -IdentityPoolName $AcctIdentityPool.IdentityPoolName -Count $Count -Verbose:$False
     $ProvTaskId = New-ProvVM -ADAccountName @($AdAccounts.SuccessfulAccounts) -ProvisioningSchemeName $ProvScheme.ProvisioningSchemeName -RunAsynchronously
     $ProvTask = Get-ProvTask -TaskId $ProvTaskId
 
@@ -286,10 +291,10 @@ function Sync-MachineCatalog {
         $ProvTask = Get-ProvTask -TaskID $ProvTaskId
     }
 
-    $ProvVMs = Get-ProvVM -ProvisioningSchemeUid $ProvScheme.ProvisioningSchemeUid
+    $ProvVMs = Get-ProvVM -ProvisioningSchemeUid $ProvScheme.ProvisioningSchemeUid -Verbose:$False
     ForEach ($ProvVM in $ProvVMs) {
-        Lock-ProvVM -ProvisioningSchemeName $ProvScheme.ProvisioningSchemeName -Tag 'Brokered' -VMID @($ProvVM.VMId) -ErrorAction SilentlyContinue
-        New-BrokerMachine -CatalogUid $BrokerCatalog.Uid -MachineName $ProvVM.ADAccountName
+        Lock-ProvVM -ProvisioningSchemeName $ProvScheme.ProvisioningSchemeName -Tag 'Brokered' -VMID @($ProvVM.VMId) -Verbose:$False -ErrorAction SilentlyContinue
+        New-BrokerMachine -CatalogUid $BrokerCatalog.Uid -MachineName $ProvVM.ADAccountName -Verbose:$False
     }
 }
 
@@ -516,6 +521,7 @@ function Rename-MachineCatalog {
     Rename-AcctIdentityPool -IdentityPoolName       $Name -NewIdentityPoolName       $NewName
 }
 
+# Power on new machines
 function Update-DeliveryGroup {
     <#
     .SYNOPSIS
@@ -603,7 +609,7 @@ function New-HostingConnection {
         $HostingConnection = Get-Item XDHyp:\Connections\$Name
     }
     $HypervisorConnectionUid = $HostingConnection.HypervisorConnectionUid | select -ExpandProperty Guid
-    New-BrokerHypervisorConnection -HypHypervisorConnectionUid $HypervisorConnectionUid
+    New-BrokerHypervisorConnection -HypHypervisorConnectionUid $HypervisorConnectionUid | Out-Null
 }
 
 #HELP
