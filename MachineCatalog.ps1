@@ -571,3 +571,88 @@ function Update-DeliveryGroup {
     }#>
     $ExistingMachines | Remove-BrokerMachine -DesktopGroup $Name
 }
+
+#HELP
+function New-HostingConnection {
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory=$True,HelpMessage='XXX')]
+        [ValidateNotNullOrEmpty()]
+        [string]
+        $Name
+        ,
+        [Parameter(Mandatory=$True,HelpMessage='XXX')]
+        [ValidateSet('VCenter','XenServer','SCVMM')]
+        [string]
+        $ConnectionType
+        ,
+        [Parameter(Mandatory=$True,HelpMessage='XXX')]
+        [ValidateNotNullOrEmpty()]
+        [string]
+        $HypervisorAddress
+        ,
+        [Parameter(Mandatory=$True,HelpMessage='XXX')]
+        [ValidateNotNullOrEmpty()]
+        [pscredential]
+        $HypervisorCredential
+    )
+
+    if (-Not (Test-Path -Path XDHyp:\Connections\$Name)) {
+        $HostingConnection = New-Item -Path XDHyp:\Connections\$Name -ConnectionType $ConnectionType -HypervisorAddress $HypervisorAddress -HypervisorCredential $HypervisorCredential -Persist
+    } else {
+        $HostingConnection = Get-Item XDHyp:\Connections\$Name
+    }
+    $HypervisorConnectionUid = $HostingConnection.HypervisorConnectionUid | select -ExpandProperty Guid
+    New-BrokerHypervisorConnection -HypHypervisorConnectionUid $HypervisorConnectionUid
+}
+
+#HELP
+function New-HostingResource {
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory=$True,HelpMessage='XXX')]
+        [ValidateNotNullOrEmpty()]
+        [string]
+        $Name
+        ,
+        [Parameter(Mandatory=$True,HelpMessage='XXX')]
+        [ValidateNotNullOrEmpty()]
+        [string]
+        $HypervisorConnectionName
+        ,
+        [Parameter(Mandatory=$True,HelpMessage='XXX')]
+        [ValidateNotNullOrEmpty()]
+        [string]
+        $ClusterName
+        ,
+        [Parameter(Mandatory=$True,HelpMessage='XXX')]
+        [ValidateNotNullOrEmpty()]
+        [string[]]
+        $NetworkName
+        ,
+        [Parameter(Mandatory=$True,HelpMessage='XXX')]
+        [ValidateNotNullOrEmpty()]
+        [string[]]
+        $StorageName
+    )
+
+    $HypervisorConnectionPath = Join-Path -Path XDHyp:\Connections -ChildPath $HypervisorConnectionName
+    $BasePath = Join-Path -Path XDHyp:\HostingUnits -ChildPath $ClusterName
+
+    Write-Verbose ('[{0}] Caching objects for lookups under {1}' -f $MyInvocation.MyCommand, $HypervisorConnectionPath)
+    $CachedObjects = Get-ChildItem -Recurse $HypervisorConnectionPath -Verbose:$False
+
+    $ClusterPath = $CachedObjects | Where-Object { $_.Name -like $ClusterName } | Select-Object FullPath
+    Write-Verbose ('[{0}] Using cluster named {1} via path <{2}>' -f $MyInvocation.MyCommand, $ClusterName,$ClusterPath.FullPath)
+
+    $NetworkPath = $CachedObjects | Where-Object { $NetworkName -icontains $_.Name } | Select-Object FullPath
+    Write-Verbose ('[{0}] Using network named {1} via path <{2}>' -f $MyInvocation.MyCommand, [string]::Join(',', $NetworkName), [string]::Join(',', $NetworkPath.FullPath))
+
+    $StoragePath = $CachedObjects | Where-Object { $StorageName -icontains $_.Name } | Select-Object FullPath
+    Write-Verbose ('[{0}] Using storage named {1} via path <{2}>' -f $MyInvocation.MyCommand, [string]::Join(',', $StorageName), [string]::Join(',', $StoragePath.FullPath))
+
+    New-Item -Verbose:$False -Path $BasePath -RootPath $ClusterPath.FullPath `
+        -HypervisorConnectionName $HypervisorConnectionName `
+        -NetworkPath $NetworkPath.FullPath `        -PersonalvDiskStoragePath $StoragePath.FullPath `
+        -StoragePath $StoragePath.FullPath | Out-Null
+}
