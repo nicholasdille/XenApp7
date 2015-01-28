@@ -46,6 +46,11 @@ function New-MachineCatalog {
     Suffix to be added to name of the catalog
     .EXAMPLE
     Get-BrokerCatalog | ConvertFrom-MachineCatalog | New-MachineCatalog -Suffix '-test'
+    .LINK
+    ConvertFrom-MachineCatalog
+    Export-MachineCatalog
+    Sync-MachineCatalog
+    Update-DeliveryGroup
     .NOTES
     Thanks to Aaron Parker (@stealthpuppy) for the original code (http://stealthpuppy.com/xendesktop-mcs-machine-catalog-powershell/)
     #>
@@ -243,6 +248,9 @@ function Sync-MachineCatalog {
     The currently active broker catalog
     .PARAMETER NewBrokerCatalogName
     The new broker catalog
+    .LINK
+    New-MachineCatalog
+    Update-DeliveryGroup
     .EXAMPLE
     Sync-ProvVM -BrokerCatalog 'BrokenCatalog' -NewBrokerCatalog 'FixedBrokerCatalog'
     .NOTES
@@ -317,6 +325,10 @@ function ConvertFrom-MachineCatalog {
     Whether to exclude the account identity pool
     .PARAMETER ExcludeHostingUnit
     Whether to exclude the hosting unit
+    .LINK
+    ConvertTo-MachineCatalog
+    New-MachineCatalog
+    Export-MachineCatalog
     .EXAMPLE
     ConvertFrom-MachineCatalog -BrokerCatalog (Get-BrokerCatalog)
     .EXAMPLE
@@ -416,6 +428,10 @@ function ConvertTo-MachineCatalog {
     Path of CSV file to import catalogs from
     .EXAMPLE
     ConvertTo-MachineCatalog -Path .\Catalogs.csv
+    .LINK
+    ConvertFrom-MachineCatalog
+    New-MachineCatalog
+    Export-MachineCatalog
     .NOTES
     Future improvement: Accept content on pipeline as well as parameter - instead of path
     #>
@@ -442,6 +458,10 @@ function Export-MachineCatalog {
     The output of Get-BrokerCatalog is piped through ConvertFrom-MachineCatalog and written to a CSV file
     .PARAMETER Path
     Path of the CSV file to export broker catalogs to
+    .LINK
+    ConvertFrom-MachineCatalog
+    ConvertTo-MachineCatalog
+    New-MachineCatalog
     .EXAMPLE
     Export-MachineCatalog -Path .\Catalogs.csv
     .NOTES
@@ -470,6 +490,9 @@ function Remove-MachineCatalog {
     The following objects will be removed: virtual machines, computer accounts, broker catalog, account identity pool, provisioning scheme
     .PARAMETER Name
     Name of the objects to remove
+    .LINK
+    New-MachineCatalog
+    Rename-MachineCatalog
     .EXAMPLE
     Remove-BrokerCatalog -Name 'test'
     #>
@@ -502,6 +525,9 @@ function Rename-MachineCatalog {
     Name of the existing catalog
     .PARAMETER NewName
     New name for the catalog
+    .LINK
+    Remove-MachineCatalog
+    New-MachineCatalog
     .EXAMPLE
     Rename-MachineCatalog -Name 'OldName' -NewName 'NewName'
     #>
@@ -535,6 +561,9 @@ function Update-DeliveryGroup {
     Name of the catalog containing new machines
     .PARAMETER Count
     Number of machines to add
+    .LINK
+    New-MachineCatalog
+    Sync-MachineCatalog
     .EXAMPLE
     The following command adds all machines from the given catalog to the specified desktop group
     Update-DeliveryGroup -Name 'DG-SessionHost' -CatalogName 'MCS-SessionHost'
@@ -595,6 +624,8 @@ function New-HostingConnection {
     This contains the URL to the vCenter web API
     .PARAMETER HypervisorCredential
     A credentials object for authentication against the hypervisor
+    .LINK
+    New-HostingResource
     .EXAMPLE
     New-HostingConnection -Name vcenter-01 -ConnectionType VCenter -HypervisorAddress https://vcenter-01.example.com/sdk -HypervisorCredential (Get-Credential)
     #>
@@ -646,6 +677,8 @@ function New-HostingResource {
     Array of names of networks in vCenter
     .PARAMETER StorageName
     Array of names of datastores in vCenter
+    .LINK
+    New-HostingConnection
     .EXAMPLE
     New-HostingResource -Name cluster-01 -HypervisorConnectionName vcenter-01 -ClusterName cluster-01 -NetworkName (vlan_100,vlan_101) -StorageName (datastore1,datastore2)
     #>
