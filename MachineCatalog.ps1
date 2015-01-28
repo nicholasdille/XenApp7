@@ -2,8 +2,6 @@
 
 Add-PSSnapin Citrix*
 
-# MasterVMImage must be a snapshot (or use New-HypVMSnapshot first)
-# Create catalog after provisioning scheme
 function New-MachineCatalog {
     <#
     .SYNOPSIS
@@ -253,8 +251,6 @@ function Sync-MachineCatalog {
     Update-DeliveryGroup
     .EXAMPLE
     Sync-ProvVM -BrokerCatalog 'BrokenCatalog' -NewBrokerCatalog 'FixedBrokerCatalog'
-    .NOTES
-    Future improvements: Accept active broker catalogs on the pipeline or parameter and assume that new broker catalogs have the same name with a given suffix
     #>
     [CmdletBinding()]
     param(
@@ -432,8 +428,6 @@ function ConvertTo-MachineCatalog {
     ConvertFrom-MachineCatalog
     New-MachineCatalog
     Export-MachineCatalog
-    .NOTES
-    Future improvement: Accept content on pipeline as well as parameter - instead of path
     #>
     [CmdletBinding()]
     param(
@@ -464,8 +458,6 @@ function Export-MachineCatalog {
     New-MachineCatalog
     .EXAMPLE
     Export-MachineCatalog -Path .\Catalogs.csv
-    .NOTES
-    Future improvement: Accept BrokerCatalog from pipeline and parameter, all catalogs should be default
     #>
     [CmdletBinding()]
     param(
